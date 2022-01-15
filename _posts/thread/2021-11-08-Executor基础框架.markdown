@@ -1,0 +1,85 @@
+---
+layout: post
+title:  "Executor基础框架(一)"
+date:   2021-11-08 20:38:33 +0800
+categories: 线程学习
+---
+
+## Java线程和常用线程池体系
+
+在Java线程池体系中，JDK为我们提供了很多便利的工具和线程池。 例如:
+
+```java
+  //创建一个固定线程为n的线程池
+  Executors.newFixedThreadPool(threadNum);
+```
+
+那么我们在创建线程池的过程中，我们会遇到哪些和线程池相关的类呢？ 带着这个疑惑，我们来一探究竟。
+
+#### 先入为主的一张类图先甩脸上
+  ![](../../assets/img/thread/Executor.png){: .normal }
+  _Executor为顶层的一个类关系_
+
+### 1.Executor
+
+线程池顶层接口,定义了一个execute接口。
+
+```java
+  public interface Executor {
+
+      /**
+       * Executes the given command at some time in the future.  The command
+       * may execute in a new thread, in a pooled thread, or in the calling
+       * thread, at the discretion of the {@code Executor} implementation.
+       *
+       * @param command the runnable task
+       * @throws RejectedExecutionException if this task cannot be
+       * accepted for execution
+       * @throws NullPointerException if command is null
+       */
+      void execute(Runnable command);
+  }
+```
+
+### 2.ExecutorService
+
+这是一个extend Executor的接口，对Executor做了一些拓展，增加了一些功能。
+
+### 3.ScheduledExecutorService
+
+该类对ExecutorService 再次进行了一定功能的扩展，支持可定时的去完成任务
+
+### 4.AbstractExecutorService
+
+抽象类，使用了模板模式实现了一部分方法。
+
+### 5.ThreadPoolExecutor
+
+普通的线程池类，用于实现一些基础的线程池相关的功能实现。
+
+### 6.ScheduledThreadPoolExecutor
+
+定时任务线程池类，用于实现定时任务的相关功能。
+
+### 7.ForkJoin
+
+基于工作窃取的原理，可以实现大任务拆小任务，
+
+### 8.Executors
+工具类
+
+
+
+#### Tips
+##### 1. 什么时候会进行InterruptException报错？
+answer: JVM 发现需要中断的线程正在处于阻塞的状态。
+
+
+
+
+
+
+
+
+
+
