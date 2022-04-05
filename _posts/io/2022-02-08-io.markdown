@@ -1,0 +1,74 @@
+## 问题
+
+### IO 什么时候使用堆内内存来分配合适，什么时候用堆外合适。还有一种直接怼到pagecache的fileChanael.
+
+视频讲到可以程序自己控制的，可以使用堆外，反之，则使用堆内。
+
+
+
+
+
+容易丢数据，但是机房断电的场景多么？只是说不可避免这个问题。
+
+
+
+
+
+### 结论
+
+1. OS 没有绝对的数据可靠性。
+
+为什么要设计pagecache？
+
+优先使用内存，减少对硬件IO的调用。 
+
+2. 想要可靠性，那怎么办?
+
+主从复制，HA。避免单点问题。
+
+
+
+3. TCP 
+
+   面向连接的，可靠的协议。
+
+   在最后一次握手的时候，在内核态开辟了资源，**什么资源？**
+
+### 	TCP/IP 的面试题
+
+
+
+
+
+什么时候用headpbuffer， 什么时候用directbuffer，分别有什么优缺点。
+
+
+
+
+
+
+
+### 局部笔记
+
+1. 传统的selector()
+
+   存在[FD_SETSIZE](http://):的限制
+
+
+
+1. 水平触发(Level-triggered notification)
+
+   A file discriptor is considered to be ready if it is possible to perform  an  I/O system call without blocking.
+
+   如果可以以非阻塞的
+
+
+
+
+
+
+
+
+
+
+

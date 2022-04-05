@@ -1,0 +1,26 @@
+Linux文件类型
+
+- -: 普通文件
+- d: 目录
+- b: 块设备
+- c: 字符设备
+- s: socket
+- p：pipeline
+- [eventpoll]
+
+
+
+
+
+学到的一些新命令
+
+lsof -op [pid] 可以查看在这个进程下被打开的文件描述符以及偏移量
+
+$ exec 9 0< test.txt  定义一个文件描述符9 ，接收test.txt 的输出作为输入
+
+$ read a 0<& 9 
+
+
+
+
+
