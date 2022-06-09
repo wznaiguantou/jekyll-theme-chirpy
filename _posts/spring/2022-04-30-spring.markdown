@@ -496,13 +496,22 @@ public class DemoApplication {
            	// 创建/获取环境信息，
           	// 1. 主要是确认你的web环境是什么
           	// 2. 对你的args进行解析封装成commandArgs
-          // 3. 触发环境准备好的事件，供需要的listeners进行消费
-          // 
+          	// 3. 触发环境准备好的事件，供需要的listeners进行消费
+          	// 4. 环境信息绑定到该SpringApplication实例里。
           	ConfigurableEnvironment environment =
                     prepareEnvironment(listeners, applicationArguments);
-            configureIgnoreBeanInfo(environment);
+            // 默认情况下设定spring.beaninfo.ignore = true
+          	configureIgnoreBeanInfo(environment);
+          	// 打印Banner，在classPaths 分别下寻找
+          	// 图片格式的banner.("gif", "jpg", "png")
+          	// 文字格式的banner.txt
+          	// 如果都没找到，那就使用默认的SpringBootBanner
             Banner printedBanner = printBanner(environment);
+          	// 这个特别好理解，就是看你存在那种class就创建其对应的ApplictionContext.
+//一般情况下，目前我们比较常用的是该org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext 
             context = createApplicationContext();
+          // 这一步又开始实例化对应的SpringBootExceptionReporter了
+          // "org.springframework.boot.diagnostics.FailureAnalyzers"
             exceptionReporters =
                     getSpringFactoriesInstances(
                             SpringBootExceptionReporter.class,
@@ -560,13 +569,9 @@ public class DemoApplication {
 
 // TODO 这里跳转到spring log
 
+**<u>细节点3: System Property: Spring.beaninfo.ignore</u>**
 
-
-
-
-
-
-
-
-
+在 configureIgnoreBeanInfo(environment)中，当发现系统参数里没有该**"spring.beaninfo.ignore"**时，对其进行了默认设定**True**.
+[IGNORE_BEANINFO_PROPERTY_NAME 的定义](https://docs.spring.io/spring-framework/docs/4.2.0.RELEASE/javadoc-api/org/springframework/beans/CachedIntrospectionResults.html#IGNORE_BEANINFO_PROPERTY_NAME)
+至于作用，这里先记录一个TODO事项，后续补充其作用。
 
