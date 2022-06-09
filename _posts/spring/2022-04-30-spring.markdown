@@ -1,0 +1,572 @@
+---
+layout: post
+title:  "SpringBoot 源码解析(一)"
+date:   2022-05-02 11:26:30 +0800
+categories: Spring
+---
+
+# SpringBoot 启动源码解析(一)
+
+## 1、 SpringBoot
+
+Spring相关的源码在这几年的工作中，也陆陆续续读了好多，也遗忘了好多，有些是因为工作，有些是因为兴趣，也有些是因为面试，
+
+但是一直都没有沉下心来好好总结下。 回过头看，自己其实还是对Spring懵懵懂懂的。
+
+这次我们重新深入的学习，温故而知新。
+
+### SpringBoot 是什么？
+
+> Spring Boot makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
+>
+> We take an opinionated view of the Spring platform and third-party libraries so you can get started with minimum fuss. Most Spring Boot applications need minimal Spring configuration.
+>
+> If you’re looking for information about a specific version, or instructions about how to upgrade from an earlier release, check out [the project release notes section](https://github.com/spring-projects/spring-boot/wiki#release-notes) on our wiki.
+>
+> -----------------
+>
+> - Spring Boot是一款可以让你非常轻松地创建基于Spring的独立的生产应用的框架，Just Run it.
+> - 基于Spring平台以及三方库，我们有自己独到的见解。所以用户可以以最少的困惑、最小的依赖、配置来搭建应用
+
+### 环境准备
+
+- JDK 1.8
+- Spring Boot 2.3.5.RELEASE
+- macOS 10.15.7 (19H1824)
+- Idea 
+
+## 2. 解析
+
+### 2.1 示例
+
+```java
+package com.example.demo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+/**
+ * this is an demo
+ *
+ * @author zhijun.gao
+ * @since 2022/5/2 06:49
+ */
+@SpringBootApplication
+public class DemoApplication {
+
+    public static void main(String[] args) {
+        try {
+            SpringApplication.run(DemoApplication.class, args);
+            System.out.println("Demo application start up");
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+    }
+}
+
+```
+
+在这里，我们写了一个非常简单的运行程序，其中的关注点主要是**@SpringBootApplication**，以及SpringApplication.run(DemoApplication.class, args);
+
+### 2.1 走进源码
+
+#### 2.1.1 启动方式
+
+```JAVA
+		
+    /**
+     * Static helper that can be used to run a {@link SpringApplication} from the specified source
+     * using default settings.
+     *
+     * @param primarySource the primary source to load
+     * @param args the application arguments (usually passed from a Java main method)
+     * @return the running {@link ApplicationContext}
+     */
+    public static ConfigurableApplicationContext run(Class<?> primarySource, String... args) {
+        return run(new Class<?>[] {primarySource}, args);
+    }
+
+    /**
+     * Static helper that can be used to run a {@link SpringApplication} from the specified sources
+     * using default settings and user supplied arguments.
+     *
+     * <p>通过静态的方式来帮助用户可以以默认的配置以及指定参数来启动一个SpringAppliction实例
+     *
+     * @param primarySources the primary sources to load
+     * @param args the application arguments (usually passed from a Java main method)
+     * @return the running {@link ApplicationContext}
+     */
+    public static ConfigurableApplicationContext run(Class<?>[] primarySources, String[] args) {
+        return new SpringApplication(primarySources).run(args);
+    }
+```
+
+其实run作为一个启动帮助静态方法，从源码上我们可以非常直观的看到2个内容。
+
+- new SpringApplication(primarySources) -- 新建出了一个SpringApplication实例
+- SpringApplication Instance.run(args) -- 依赖第一步的实例真实进行启动
+
+因为2个构造函数其实就是一个重载关系，入参其实就是一样的，我们看一个方法的注释就基本可以知道要干嘛了。
+
+#### 2.1.2 构造函数
+
+```java
+
+    /**
+     * Create a new {@link SpringApplication} instance. The application context will load beans from
+     * the specified primary sources (see {@link SpringApplication class-level} documentation for
+     * details. The instance can be customized before calling {@link #run(String...)}.
+     *
+     * @param primarySources the primary bean sources
+     * @see #run(Class, String[])
+     * @see #SpringApplication(ResourceLoader, Class...)
+     * @see #setSources(Set)
+     */
+    public SpringApplication(Class<?>... primarySources) {
+        this(null, primarySources);
+    }
+
+    /**
+     * Create a new {@link SpringApplication} instance. The application context will load beans from
+     * the specified primary sources (see {@link SpringApplication class-level} documentation for
+     * details. The instance can be customized before calling {@link #run(String...)}.
+     *
+     * @param resourceLoader the resource loader to use
+     * @param primarySources the primary bean sources
+     * @see #run(Class, String[])
+     * @see #setSources(Set)
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
+        // 这里注意，ResourceLoader 一开始是null
+        this.resourceLoader = resourceLoader;
+        Assert.notNull(primarySources, "PrimarySources must not be null");
+        this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
+        // 推断你的web容器
+        this.webApplicationType = WebApplicationType.deduceFromClasspath();
+        // 核心点1，找到所有的ApplicationContextInitializer，为后续上下文初始化做准备 (7个)
+        // "org.springframework.boot.context.ConfigurationWarningsApplicationContextInitializer",
+        // "org.springframework.boot.context.ContextIdApplicationContextInitializer",
+        // "org.springframework.boot.context.config.DelegatingApplicationContextInitializer",
+        // "org.springframework.boot.rsocket.context.RSocketPortInfoApplicationContextInitializer",
+        // "org.springframework.boot.web.context.ServerPortInfoApplicationContextInitializer",
+        // "org.springframework.boot.autoconfigure.SharedMetadataReaderFactoryContextInitializer",
+        // "org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLoggingListener"
+        setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+        // 核心点2，找到所有的ApplicationListener，为后续采用观察者模式的扩展点做准备(11个)
+        // "org.springframework.boot.ClearCachesApplicationListener",
+        // "org.springframework.boot.builder.ParentContextCloserApplicationListener",
+        // "org.springframework.boot.cloud.CloudFoundryVcapEnvironmentPostProcessor",
+        // "org.springframework.boot.context.FileEncodingApplicationListener",
+        // "org.springframework.boot.context.config.AnsiOutputApplicationListener",
+        // "org.springframework.boot.context.config.ConfigFileApplicationListener",
+        // "org.springframework.boot.context.config.DelegatingApplicationListener",
+        // "org.springframework.boot.context.logging.ClasspathLoggingApplicationListener",
+        // "org.springframework.boot.context.logging.LoggingApplicationListener",
+        // "org.springframework.boot.liquibase.LiquibaseServiceLocatorApplicationListener",
+        // "org.springframework.boot.autoconfigure.BackgroundPreinitializer"
+        setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
+        // 核心点3， 找到应用的main函数，这才是整个应用的入口。
+        // 这里是一个有趣的点，这里的手法是搞了一个runtimeException，并通过解析异常的堆栈信息递归遍历找到main函数。
+        this.mainApplicationClass = deduceMainApplicationClass();
+    }
+```
+
+**注意点:**
+
+- **resourceLoader** 一开始为**null**, 但是后续肯定是会用到的，所以肯定还有一次初始化的地方。
+  - 这里也代表如果我们有自己的ResourceLoader，那我们也可以进行指定，这里也是一个扩展点
+- **webApplicationType**: 这里会根据ClassPath来推断你的运行环境，到底是下列三种的哪一种。
+  - None
+  - Sevlet
+  - Reactive
+- **mainApplicationClass** **<u>不一定</u>**等于你的primarySources。虽然有好多时候是相等的，但是这里你要考虑的是primarySources代表了
+  允许你有多个配置类，那一定有一个mainApplication来收拢你的这些primarySources配置类
+
+**<u>核心点1: 加载配置文件和实例化工厂类、监听器类</u>**
+
+稍微点进去扫一眼，我们可以看到setListener 和 setInitializaers 这2个方法没啥好看的，就是赋值对应的子类集合。
+那么getSpringFactoriesInstances(T.class) 应该就是我们需要重点关注的地方。毕竟还复用了。
+
+```java
+    /**
+     * Sets the {@link ApplicationListener}s that will be applied to the SpringApplication and
+     * registered with the {@link ApplicationContext}.
+     *
+     * @param listeners the listeners to set
+     */
+    public void setListeners(Collection<? extends ApplicationListener<?>> listeners) {
+        this.listeners = new ArrayList<>(listeners);
+    }
+
+    /**
+     * Sets the {@link ApplicationContextInitializer} that will be applied to the Spring {@link
+     * ApplicationContext}.
+     *
+     * @param initializers the initializers to set
+     */
+    public void setInitializers(
+            Collection<? extends ApplicationContextInitializer<?>> initializers) {
+        this.initializers = new ArrayList<>(initializers);
+    }
+
+    private <T> Collection<T> getSpringFactoriesInstances(Class<T> type) {
+        return getSpringFactoriesInstances(type, new Class<?>[] {});
+    }
+
+    private <T> Collection<T> getSpringFactoriesInstances(
+            Class<T> type, Class<?>[] parameterTypes, Object... args) {
+        // 得到一个类加载器,
+        // 先看构造器提供的resourceLoader的classLoader.
+        // 后看通常的情况是该线程所使用到的classLoader.
+        ClassLoader classLoader = getClassLoader();
+        // Use names and ensure unique to protect against duplicates
+        // 这里会通过loadFactoryNames加载(META-INF/spring.factories)资源文件,
+        // 注意，这里对资源文件只会加载一次，搞了一个缓存进行存储
+        Set<String> names =
+                new LinkedHashSet<>(SpringFactoriesLoader.loadFactoryNames(type, classLoader));
+        // 实例化这些对应Type的工厂类
+        List<T> instances =
+                createSpringFactoriesInstances(type, parameterTypes, classLoader, args, names);
+        AnnotationAwareOrderComparator.sort(instances);
+        return instances;
+    }
+```
+
+**<u>核心点2: 配置文件-META-INF/spring.factories</u>**
+
+搜索可以找到该文件会存在于3个jar中。
+
+- spring-beans-xxx.RELEASE.jar
+- spring-boot-xxx.RELEASE.jar
+- spring-boot-autoconfigure-xxx.RELEASE.jar
+
+源文件我就不展示了，但是我们需要注意一点的地方是，这3个jar中定义的部分内如是重复的，所以Spring Boot 在启动加载的时候会进行去重处理。我们这里给一个json样式最后处理得到的结果
+
+```json
+{
+    "org.springframework.boot.diagnostics.FailureAnalyzer": [
+        "org.springframework.boot.context.properties.NotConstructorBoundInjectionFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.BeanCurrentlyInCreationFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.BeanDefinitionOverrideFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.BeanNotOfRequiredTypeFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.BindFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.BindValidationFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.UnboundConfigurationPropertyFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.ConnectorStartFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.NoSuchMethodFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.NoUniqueBeanDefinitionFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.PortInUseFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.ValidationExceptionFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.InvalidConfigurationPropertyNameFailureAnalyzer",
+        "org.springframework.boot.diagnostics.analyzer.InvalidConfigurationPropertyValueFailureAnalyzer",
+        "org.springframework.boot.autoconfigure.data.redis.RedisUrlSyntaxFailureAnalyzer",
+        "org.springframework.boot.autoconfigure.diagnostics.analyzer.NoSuchBeanDefinitionFailureAnalyzer",
+        "org.springframework.boot.autoconfigure.flyway.FlywayMigrationScriptMissingFailureAnalyzer",
+        "org.springframework.boot.autoconfigure.jdbc.DataSourceBeanCreationFailureAnalyzer",
+        "org.springframework.boot.autoconfigure.jdbc.HikariDriverConfigurationFailureAnalyzer",
+        "org.springframework.boot.autoconfigure.r2dbc.ConnectionFactoryBeanCreationFailureAnalyzer",
+        "org.springframework.boot.autoconfigure.session.NonUniqueSessionRepositoryFailureAnalyzer"
+    ],
+    "org.springframework.boot.env.EnvironmentPostProcessor": [
+        "org.springframework.boot.cloud.CloudFoundryVcapEnvironmentPostProcessor",
+        "org.springframework.boot.env.SpringApplicationJsonEnvironmentPostProcessor",
+        "org.springframework.boot.env.SystemEnvironmentPropertySourceEnvironmentPostProcessor",
+        "org.springframework.boot.reactor.DebugAgentEnvironmentPostProcessor"
+    ],
+    "org.springframework.boot.SpringApplicationRunListener": [
+        "org.springframework.boot.context.event.EventPublishingRunListener"
+    ],
+    "org.springframework.context.ApplicationContextInitializer": [
+        "org.springframework.boot.context.ConfigurationWarningsApplicationContextInitializer",
+        "org.springframework.boot.context.ContextIdApplicationContextInitializer",
+        "org.springframework.boot.context.config.DelegatingApplicationContextInitializer",
+        "org.springframework.boot.rsocket.context.RSocketPortInfoApplicationContextInitializer",
+        "org.springframework.boot.web.context.ServerPortInfoApplicationContextInitializer",
+        "org.springframework.boot.autoconfigure.SharedMetadataReaderFactoryContextInitializer",
+        "org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLoggingListener"
+    ],
+    "org.springframework.boot.env.PropertySourceLoader": [
+        "org.springframework.boot.env.PropertiesPropertySourceLoader",
+        "org.springframework.boot.env.YamlPropertySourceLoader"
+    ],
+    "org.springframework.context.ApplicationListener": [
+        "org.springframework.boot.ClearCachesApplicationListener",
+        "org.springframework.boot.builder.ParentContextCloserApplicationListener",
+        "org.springframework.boot.cloud.CloudFoundryVcapEnvironmentPostProcessor",
+        "org.springframework.boot.context.FileEncodingApplicationListener",
+        "org.springframework.boot.context.config.AnsiOutputApplicationListener",
+        "org.springframework.boot.context.config.ConfigFileApplicationListener",
+        "org.springframework.boot.context.config.DelegatingApplicationListener",
+        "org.springframework.boot.context.logging.ClasspathLoggingApplicationListener",
+        "org.springframework.boot.context.logging.LoggingApplicationListener",
+        "org.springframework.boot.liquibase.LiquibaseServiceLocatorApplicationListener",
+        "org.springframework.boot.autoconfigure.BackgroundPreinitializer"
+    ],
+    "org.springframework.boot.diagnostics.FailureAnalysisReporter": [
+        "org.springframework.boot.diagnostics.LoggingFailureAnalysisReporter"
+    ],
+    "org.springframework.boot.SpringBootExceptionReporter": [
+        "org.springframework.boot.diagnostics.FailureAnalyzers"
+    ],
+    "org.springframework.boot.autoconfigure.AutoConfigurationImportFilter": [
+        "org.springframework.boot.autoconfigure.condition.OnBeanCondition",
+        "org.springframework.boot.autoconfigure.condition.OnClassCondition",
+        "org.springframework.boot.autoconfigure.condition.OnWebApplicationCondition"
+    ],
+    "org.springframework.boot.autoconfigure.AutoConfigurationImportListener": [
+        "org.springframework.boot.autoconfigure.condition.ConditionEvaluationReportAutoConfigurationImportListener"
+    ],
+    "org.springframework.boot.autoconfigure.template.TemplateAvailabilityProvider": [
+        "org.springframework.boot.autoconfigure.freemarker.FreeMarkerTemplateAvailabilityProvider",
+        "org.springframework.boot.autoconfigure.mustache.MustacheTemplateAvailabilityProvider",
+        "org.springframework.boot.autoconfigure.groovy.template.GroovyTemplateAvailabilityProvider",
+        "org.springframework.boot.autoconfigure.thymeleaf.ThymeleafTemplateAvailabilityProvider",
+        "org.springframework.boot.autoconfigure.web.servlet.JspTemplateAvailabilityProvider"
+    ],
+    "org.springframework.boot.autoconfigure.EnableAutoConfiguration": [
+        "org.springframework.boot.autoconfigure.admin.SpringApplicationAdminJmxAutoConfiguration",
+        "org.springframework.boot.autoconfigure.aop.AopAutoConfiguration",
+        "org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration",
+        "org.springframework.boot.autoconfigure.batch.BatchAutoConfiguration",
+        "org.springframework.boot.autoconfigure.cache.CacheAutoConfiguration",
+        "org.springframework.boot.autoconfigure.cassandra.CassandraAutoConfiguration",
+        "org.springframework.boot.autoconfigure.context.ConfigurationPropertiesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.context.LifecycleAutoConfiguration",
+        "org.springframework.boot.autoconfigure.context.MessageSourceAutoConfiguration",
+        "org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration",
+        "org.springframework.boot.autoconfigure.couchbase.CouchbaseAutoConfiguration",
+        "org.springframework.boot.autoconfigure.dao.PersistenceExceptionTranslationAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.cassandra.CassandraDataAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.cassandra.CassandraReactiveDataAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.cassandra.CassandraReactiveRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.cassandra.CassandraRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.couchbase.CouchbaseDataAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.couchbase.CouchbaseReactiveDataAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.couchbase.CouchbaseReactiveRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.couchbase.CouchbaseRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchDataAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.elasticsearch.ReactiveElasticsearchRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.elasticsearch.ReactiveElasticsearchRestClientAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.jdbc.JdbcRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.ldap.LdapRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.mongo.MongoReactiveDataAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.mongo.MongoReactiveRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.neo4j.Neo4jDataAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.neo4j.Neo4jRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.solr.SolrRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.r2dbc.R2dbcDataAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.r2dbc.R2dbcRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.r2dbc.R2dbcTransactionManagerAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.rest.RepositoryRestMvcAutoConfiguration",
+        "org.springframework.boot.autoconfigure.data.web.SpringDataWebAutoConfiguration",
+        "org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration",
+        "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
+        "org.springframework.boot.autoconfigure.freemarker.FreeMarkerAutoConfiguration",
+        "org.springframework.boot.autoconfigure.groovy.template.GroovyTemplateAutoConfiguration",
+        "org.springframework.boot.autoconfigure.gson.GsonAutoConfiguration",
+        "org.springframework.boot.autoconfigure.h2.H2ConsoleAutoConfiguration",
+        "org.springframework.boot.autoconfigure.hateoas.HypermediaAutoConfiguration",
+        "org.springframework.boot.autoconfigure.hazelcast.HazelcastAutoConfiguration",
+        "org.springframework.boot.autoconfigure.hazelcast.HazelcastJpaDependencyAutoConfiguration",
+        "org.springframework.boot.autoconfigure.http.HttpMessageConvertersAutoConfiguration",
+        "org.springframework.boot.autoconfigure.http.codec.CodecsAutoConfiguration",
+        "org.springframework.boot.autoconfigure.influx.InfluxDbAutoConfiguration",
+        "org.springframework.boot.autoconfigure.info.ProjectInfoAutoConfiguration",
+        "org.springframework.boot.autoconfigure.integration.IntegrationAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jdbc.JndiDataSourceAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jdbc.XADataSourceAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jms.JmsAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jmx.JmxAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jms.JndiConnectionFactoryAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jms.activemq.ActiveMQAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jms.artemis.ArtemisAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jersey.JerseyAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jooq.JooqAutoConfiguration",
+        "org.springframework.boot.autoconfigure.jsonb.JsonbAutoConfiguration",
+        "org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration",
+        "org.springframework.boot.autoconfigure.availability.ApplicationAvailabilityAutoConfiguration",
+        "org.springframework.boot.autoconfigure.ldap.embedded.EmbeddedLdapAutoConfiguration",
+        "org.springframework.boot.autoconfigure.ldap.LdapAutoConfiguration",
+        "org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration",
+        "org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration",
+        "org.springframework.boot.autoconfigure.mail.MailSenderValidatorAutoConfiguration",
+        "org.springframework.boot.autoconfigure.mongo.embedded.EmbeddedMongoAutoConfiguration",
+        "org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration",
+        "org.springframework.boot.autoconfigure.mongo.MongoReactiveAutoConfiguration",
+        "org.springframework.boot.autoconfigure.mustache.MustacheAutoConfiguration",
+        "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration",
+        "org.springframework.boot.autoconfigure.quartz.QuartzAutoConfiguration",
+        "org.springframework.boot.autoconfigure.r2dbc.R2dbcAutoConfiguration",
+        "org.springframework.boot.autoconfigure.rsocket.RSocketMessagingAutoConfiguration",
+        "org.springframework.boot.autoconfigure.rsocket.RSocketRequesterAutoConfiguration",
+        "org.springframework.boot.autoconfigure.rsocket.RSocketServerAutoConfiguration",
+        "org.springframework.boot.autoconfigure.rsocket.RSocketStrategiesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.reactive.ReactiveSecurityAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.reactive.ReactiveUserDetailsServiceAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.rsocket.RSocketSecurityAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.saml2.Saml2RelyingPartyAutoConfiguration",
+        "org.springframework.boot.autoconfigure.sendgrid.SendGridAutoConfiguration",
+        "org.springframework.boot.autoconfigure.session.SessionAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.oauth2.client.reactive.ReactiveOAuth2ClientAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration",
+        "org.springframework.boot.autoconfigure.security.oauth2.resource.reactive.ReactiveOAuth2ResourceServerAutoConfiguration",
+        "org.springframework.boot.autoconfigure.solr.SolrAutoConfiguration",
+        "org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration",
+        "org.springframework.boot.autoconfigure.task.TaskSchedulingAutoConfiguration",
+        "org.springframework.boot.autoconfigure.thymeleaf.ThymeleafAutoConfiguration",
+        "org.springframework.boot.autoconfigure.transaction.TransactionAutoConfiguration",
+        "org.springframework.boot.autoconfigure.transaction.jta.JtaAutoConfiguration",
+        "org.springframework.boot.autoconfigure.validation.ValidationAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.client.RestTemplateAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.embedded.EmbeddedWebServerFactoryCustomizerAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.reactive.HttpHandlerAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.reactive.ReactiveWebServerFactoryAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.reactive.WebFluxAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.reactive.error.ErrorWebFluxAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.reactive.function.client.ClientHttpConnectorAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.reactive.function.client.WebClientAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.servlet.DispatcherServletAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.servlet.ServletWebServerFactoryAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.servlet.error.ErrorMvcAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.servlet.HttpEncodingAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.servlet.MultipartAutoConfiguration",
+        "org.springframework.boot.autoconfigure.web.servlet.WebMvcAutoConfiguration",
+        "org.springframework.boot.autoconfigure.websocket.reactive.WebSocketReactiveAutoConfiguration",
+        "org.springframework.boot.autoconfigure.websocket.servlet.WebSocketServletAutoConfiguration",
+        "org.springframework.boot.autoconfigure.websocket.servlet.WebSocketMessagingAutoConfiguration",
+        "org.springframework.boot.autoconfigure.webservices.WebServicesAutoConfiguration",
+        "org.springframework.boot.autoconfigure.webservices.client.WebServiceTemplateAutoConfiguration"
+    ],
+    "org.springframework.beans.BeanInfoFactory": [
+        "org.springframework.beans.ExtendedBeanInfoFactory"
+    ]
+}
+```
+
+#### 2.1.2 run方法
+
+```java
+/**
+     * Run the Spring application, creating and refreshing a new {@link ApplicationContext}.
+     *
+     * @param args the application arguments (usually passed from a Java main method)
+     * @return a running {@link ApplicationContext}
+     */
+    public ConfigurableApplicationContext run(String... args) {
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        ConfigurableApplicationContext context = null;
+        Collection<SpringBootExceptionReporter> exceptionReporters = new ArrayList<>();
+
+        // 设定java.jwt.headless = true,
+        // 作用: 在服务器端无输入、输出设备时，仍然能使其具备数据输出能力。例如，可以计算生成出图像数据并传输给其他显示设备
+        // 进行处理, 实际没有亲身体验过，只能看文章理解了。下面给了链接
+        configureHeadlessProperty();
+
+        // 核心点1，找到所有的SpringApplicationRunListeners，贯穿了整个启动的过程(1个)
+        // "org.springframework.boot.context.event.EventPublishingRunListener"
+        SpringApplicationRunListeners listeners = getRunListeners(args);
+
+        // 这时候启动的就是上面的这个类, 并会广播一个ApplicationStartingEvent, 在启动时默认会有如下listener 关注该事件，而listener
+        // 具体会根据事件来做什么，后续我们会新开文章进行描述。
+        // org.springframework.boot.context.logging.LoggingApplicationListener
+        // org.springframework.boot.autoconfigure.BackgroundPreinitializer
+        // org.springframework.boot.context.config.DelegatingApplicationListener
+        // org.springframework.boot.liquibase.LiquibaseServiceLocatorApplicationListener
+        listeners.starting();
+        try {
+            ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
+           	// 创建/获取环境信息，
+          	// 1. 主要是确认你的web环境是什么
+          	// 2. 对你的args进行解析封装成commandArgs
+          // 3. 触发环境准备好的事件，供需要的listeners进行消费
+          // 
+          	ConfigurableEnvironment environment =
+                    prepareEnvironment(listeners, applicationArguments);
+            configureIgnoreBeanInfo(environment);
+            Banner printedBanner = printBanner(environment);
+            context = createApplicationContext();
+            exceptionReporters =
+                    getSpringFactoriesInstances(
+                            SpringBootExceptionReporter.class,
+                            new Class[] {ConfigurableApplicationContext.class},
+                            context);
+            prepareContext(context, environment, listeners, applicationArguments, printedBanner);
+            refreshContext(context);
+            afterRefresh(context, applicationArguments);
+            stopWatch.stop();
+            if (this.logStartupInfo) {
+                new StartupInfoLogger(this.mainApplicationClass)
+                        .logStarted(getApplicationLog(), stopWatch);
+            }
+            listeners.started(context);
+            callRunners(context, applicationArguments);
+        } catch (Throwable ex) {
+            handleRunFailure(context, ex, exceptionReporters, listeners);
+            throw new IllegalStateException(ex);
+        }
+
+        try {
+            listeners.running(context);
+        } catch (Throwable ex) {
+            handleRunFailure(context, ex, exceptionReporters, null);
+            throw new IllegalStateException(ex);
+        }
+        return context;
+    }
+```
+
+**<u>细节点1: 开启JVM HeadLess Mode</u>**
+
+[configureHeadlessProperty();](https://www.oracle.com/technical-resources/articles/javase/headless.html)
+
+```java
+    private static final String SYSTEM_PROPERTY_JAVA_AWT_HEADLESS = "java.awt.headless";
+
+    private boolean headless = true;
+
+    private void configureHeadlessProperty() {
+        System.setProperty(
+                SYSTEM_PROPERTY_JAVA_AWT_HEADLESS,
+                System.getProperty(
+                        SYSTEM_PROPERTY_JAVA_AWT_HEADLESS, Boolean.toString(this.headless)));
+    }
+```
+
+
+
+主要描述的是，缺失显示设备、输入设备等的情况下，仍然可以让其进行操作。
+
+> Headless mode is a system configuration in which the display device, keyboard, or mouse is lacking. Sounds unexpected, but actually you can perform different operations in this mode, even with graphic data.
+
+**<u>细节点2: ApplicationRunListener Start</u>**
+
+// TODO 这里跳转到spring log
+
+
+
+
+
+
+
+
+
+
+
