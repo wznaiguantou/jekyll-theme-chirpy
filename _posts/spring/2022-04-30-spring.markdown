@@ -512,6 +512,9 @@ public class DemoApplication {
             context = createApplicationContext();
           // 这一步又开始实例化对应的SpringBootExceptionReporter了
           // "org.springframework.boot.diagnostics.FailureAnalyzers"
+          
+          
+          //
             exceptionReporters =
                     getSpringFactoriesInstances(
                             SpringBootExceptionReporter.class,
@@ -574,4 +577,84 @@ public class DemoApplication {
 在 configureIgnoreBeanInfo(environment)中，当发现系统参数里没有该**"spring.beaninfo.ignore"**时，对其进行了默认设定**True**.
 [IGNORE_BEANINFO_PROPERTY_NAME 的定义](https://docs.spring.io/spring-framework/docs/4.2.0.RELEASE/javadoc-api/org/springframework/beans/CachedIntrospectionResults.html#IGNORE_BEANINFO_PROPERTY_NAME)
 至于作用，这里先记录一个TODO事项，后续补充其作用。
+
+**<u>细节点4: FailureAnalyzer 的初始化，处理异常报错</u>**
+
+在 **exceptionReporters** 上Spring默认的实例化是 "org.springframework.boot.diagnostics.FailureAnalyzers"。
+而在实例化的过程中，会继续实例化实现FailureAnalyzer接口的对象。
+以下是在需要实例化的对象。
+
+//TODO 后续我们新开篇章针对每个分析器进行源码分析。
+
+```json
+[
+    "org.springframework.boot.context.properties.NotConstructorBoundInjectionFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.BeanCurrentlyInCreationFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.BeanDefinitionOverrideFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.BeanNotOfRequiredTypeFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.BindFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.BindValidationFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.UnboundConfigurationPropertyFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.ConnectorStartFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.NoSuchMethodFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.NoUniqueBeanDefinitionFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.PortInUseFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.ValidationExceptionFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.InvalidConfigurationPropertyNameFailureAnalyzer",
+    "org.springframework.boot.diagnostics.analyzer.InvalidConfigurationPropertyValueFailureAnalyzer",
+    "org.springframework.boot.autoconfigure.data.redis.RedisUrlSyntaxFailureAnalyzer",
+    "org.springframework.boot.autoconfigure.diagnostics.analyzer.NoSuchBeanDefinitionFailureAnalyzer",
+    "org.springframework.boot.autoconfigure.flyway.FlywayMigrationScriptMissingFailureAnalyzer",
+    "org.springframework.boot.autoconfigure.jdbc.DataSourceBeanCreationFailureAnalyzer",
+    "org.springframework.boot.autoconfigure.jdbc.HikariDriverConfigurationFailureAnalyzer",
+    "org.springframework.boot.autoconfigure.r2dbc.ConnectionFactoryBeanCreationFailureAnalyzer",
+    "org.springframework.boot.autoconfigure.session.NonUniqueSessionRepositoryFailureAnalyzer"
+]
+```
+
+**<u>细节点5: PrepareContext</u>**
+
+```java
+private void prepareContext(ConfigurableApplicationContext context, ConfigurableEnvironment environment,
+			SpringApplicationRunListeners listeners, ApplicationArguments applicationArguments, Banner printedBanner) {
+	  // 上下文设定环境信息
+		context.setEnvironment(environment);
+	  // 后置处理上下文。默认配置下只是注册了各式各样的转换器。
+		postProcessApplicationContext(context);
+		// 针对之前找到的7个默认初始化器进行context参数绑定，
+  	applyInitializers(context);
+  	//找到需要监听上下文准备完成的消费者，发送上下文准备事件
+		listeners.contextPrepared(context);
+		if (this.logStartupInfo) {
+			logStartupInfo(context.getParent() == null);
+			logStartupProfileInfo(context);
+		}
+		// Add boot specific singleton beans
+		ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
+		beanFactory.registerSingleton("springApplicationArguments", applicationArguments);
+		if (printedBanner != null) {
+			beanFactory.registerSingleton("springBootBanner", printedBanner);
+		}
+		if (beanFactory instanceof DefaultListableBeanFactory) {
+			((DefaultListableBeanFactory) beanFactory)
+					.setAllowBeanDefinitionOverriding(this.allowBeanDefinitionOverriding);
+		}
+		if (this.lazyInitialization) {
+			context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor());
+		}
+		// Load the sources
+		Set<Object> sources = getAllSources();
+		Assert.notEmpty(sources, "Sources must not be empty");
+		load(context, sources.toArray(new Object[0]));
+		listeners.contextLoaded(context);
+	}
+```
+
+
+
+
+
+
+
+
 
