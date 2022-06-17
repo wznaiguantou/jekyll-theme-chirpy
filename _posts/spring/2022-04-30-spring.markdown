@@ -105,7 +105,7 @@ public class DemoApplication {
 其实run作为一个启动帮助静态方法，从源码上我们可以非常直观的看到2个内容。
 
 - new SpringApplication(primarySources) -- 新建出了一个SpringApplication实例
-- SpringApplication Instance.run(args) -- 依赖第一步的实例真实进行启动
+- SpringApplication Instance.run(args) -- 依赖第一步的实例正式进行启动
 
 因为2个构造函数其实就是一个重载关系，入参其实就是一样的，我们看一个方法的注释就基本可以知道要干嘛了。
 
@@ -143,7 +143,7 @@ public class DemoApplication {
         this.resourceLoader = resourceLoader;
         Assert.notNull(primarySources, "PrimarySources must not be null");
         this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
-        // 推断你的web容器
+        // 推断你是哪一种web容器
         this.webApplicationType = WebApplicationType.deduceFromClasspath();
         // 核心点1，找到所有的ApplicationContextInitializer，为后续上下文初始化做准备 (7个)
         // "org.springframework.boot.context.ConfigurationWarningsApplicationContextInitializer",
@@ -242,7 +242,7 @@ public class DemoApplication {
 - spring-boot-xxx.RELEASE.jar
 - spring-boot-autoconfigure-xxx.RELEASE.jar
 
-源文件我就不展示了，但是我们需要注意一点的地方是，这3个jar中定义的部分内如是重复的，所以Spring Boot 在启动加载的时候会进行去重处理。我们这里给一个json样式最后处理得到的结果
+源文件我就不展示了，但是我们需要注意一点的地方是，这3个jar中定义的部分内如是重复的，所以Spring Boot在启动加载的时候会进行去重处理。我们这里给一个json样式最后处理得到的结果
 
 ```json
 {
@@ -512,9 +512,6 @@ public class DemoApplication {
             context = createApplicationContext();
           // 这一步又开始实例化对应的SpringBootExceptionReporter了
           // "org.springframework.boot.diagnostics.FailureAnalyzers"
-          
-          
-          //
             exceptionReporters =
                     getSpringFactoriesInstances(
                             SpringBootExceptionReporter.class,
@@ -523,11 +520,13 @@ public class DemoApplication {
             prepareContext(context, environment, listeners, applicationArguments, printedBanner);
             refreshContext(context);
             afterRefresh(context, applicationArguments);
+          	// 直到这一步，整个启动过程基本算完成了。
             stopWatch.stop();
             if (this.logStartupInfo) {
                 new StartupInfoLogger(this.mainApplicationClass)
                         .logStarted(getApplicationLog(), stopWatch);
             }
+          	// 发送ApplicationStartedEvent
             listeners.started(context);
             callRunners(context, applicationArguments);
         } catch (Throwable ex) {
@@ -623,13 +622,14 @@ private void prepareContext(ConfigurableApplicationContext context, Configurable
 		postProcessApplicationContext(context);
 		// 针对之前找到的7个默认初始化器进行context参数绑定，
   	applyInitializers(context);
-  	//找到需要监听上下文准备完成的消费者，发送上下文准备事件
+  	//找到需要监听上下文准备完成的消费者，发送ApplicationContextInitializedEvent
 		listeners.contextPrepared(context);
 		if (this.logStartupInfo) {
 			logStartupInfo(context.getParent() == null);
 			logStartupProfileInfo(context);
 		}
 		// Add boot specific singleton beans
+  	// 通过context得到一个beanFactory。并对该beanFactory进行基础设定
 		ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
 		beanFactory.registerSingleton("springApplicationArguments", applicationArguments);
 		if (printedBanner != null) {
@@ -643,18 +643,41 @@ private void prepareContext(ConfigurableApplicationContext context, Configurable
 			context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor());
 		}
 		// Load the sources
+  	// 这里主要是获取PrimarySouces以及注册的所有资源，在后续进行加载
 		Set<Object> sources = getAllSources();
 		Assert.notEmpty(sources, "Sources must not be empty");
-		load(context, sources.toArray(new Object[0]));
-		listeners.contextLoaded(context);
+		// 按照类型进行资源加载，并注册到上下文中。
+  	// 比较关键的点是创建了2个扫描器
+		// this.annotatedReader = new AnnotatedBeanDefinitionReader(registry);
+		// this.xmlReader = new XmlBeanDefinitionReader(registry);
+  	load(context, sources.toArray(new Object[0]));
+		// 把ContextLoad的事件发出去，注意这里是ApplicationPreparedEvent
+  	listeners.contextLoaded(context);
 	}
 ```
 
 
 
+**<u>细节点6: RefreshContext</u>**
+
+// TODO 这里是整个SpringBoot 启动过程中最核心的部分。新开一篇来讲
+
+
+
+**<u>细节点7: AfterRefreshContext</u>**
 
 
 
 
 
+**<u>细节点8: SpringBoot事件流程</u>**
+
+- EventPublishingRunListener start
+- EnvironmentPreparedEvent
+- ApplicationContextInitializedEvent
+- ApplicationPreparedEvent
+- ApplicationStartedEvent
+- AvailabilityChangeEvent.Correct
+- ApplicationReadyEvent
+- AvailabilityChangeEvent.
 
