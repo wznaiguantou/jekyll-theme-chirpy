@@ -178,9 +178,9 @@ public class DemoApplication {
 - **resourceLoader** 一开始为**null**, 但是后续肯定是会用到的，所以肯定还有一次初始化的地方。
   - 这里也代表如果我们有自己的ResourceLoader，那我们也可以进行指定，这里也是一个扩展点
 - **webApplicationType**: 这里会根据ClassPath来推断你的运行环境，到底是下列三种的哪一种。
-  - None
-  - Sevlet
-  - Reactive
+  - None - not exist(["javax.servlet.Servlet","org.springframework.web.context.ConfigurableWebApplicationContext"])
+  - Reactive -  exist(org.springframework.web.reactive.DispatcherHandler)
+  - Sevlet (剩下的情况一定属于Sevlet）
 - **mainApplicationClass** **<u>不一定</u>**等于你的primarySources。虽然有好多时候是相等的，但是这里你要考虑的是primarySources代表了
   允许你有多个配置类，那一定有一个mainApplication来收拢你的这些primarySources配置类
 
@@ -571,13 +571,45 @@ public class DemoApplication {
 
 // TODO 这里跳转到spring log
 
-**<u>细节点3: System Property: Spring.beaninfo.ignore</u>**
+**<u>细节点3: Environment Prepared</u>**
+
+```java
+private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners listeners,
+      ApplicationArguments applicationArguments) {
+   // Create and configure the environment
+   // 如果环境存在，则不创建，不然根据Application.webApplicationType进行创建，
+   //case SERVLET->StandardServletEnvironment
+	//	case REACTIVE->StandardReactiveWebEnvironment
+	//	default:StandardEnvironment
+   ConfigurableEnvironment environment = getOrCreateEnvironment();
+   configureEnvironment(environment, applicationArguments.getSourceArgs());
+   ConfigurationPropertySources.attach(environment);
+   listeners.environmentPrepared(environment);
+   bindToSpringApplication(environment);
+   if (!this.isCustomEnvironment) {
+      environment = new EnvironmentConverter(getClassLoader()).convertEnvironmentIfNecessary(environment,
+            deduceEnvironmentClass());
+   }
+   ConfigurationPropertySources.attach(environment);
+   return environment;
+}
+```
+
+三中环境的类图：
+
+<img src="../../assets/img/spring/environment/environment.png" alt="Environment Class Diagram" style="zoom:50%;" />
+
+
+
+
+
+**<u>细节点4: System Property: Spring.beaninfo.ignore</u>**
 
 在 configureIgnoreBeanInfo(environment)中，当发现系统参数里没有该**"spring.beaninfo.ignore"**时，对其进行了默认设定**True**.
 [IGNORE_BEANINFO_PROPERTY_NAME 的定义](https://docs.spring.io/spring-framework/docs/4.2.0.RELEASE/javadoc-api/org/springframework/beans/CachedIntrospectionResults.html#IGNORE_BEANINFO_PROPERTY_NAME)
 至于作用，这里先记录一个TODO事项，后续补充其作用。
 
-**<u>细节点4: FailureAnalyzer 的初始化，处理异常报错</u>**
+**<u>细节点5: FailureAnalyzer 的初始化，处理异常报错</u>**
 
 在 **exceptionReporters** 上Spring默认的实例化是 "org.springframework.boot.diagnostics.FailureAnalyzers"。
 而在实例化的过程中，会继续实例化实现FailureAnalyzer接口的对象。
