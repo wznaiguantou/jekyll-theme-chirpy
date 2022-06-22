@@ -500,7 +500,7 @@ public class DemoApplication {
           	// 4. 环境信息绑定到该SpringApplication实例里。
           	ConfigurableEnvironment environment =
                     prepareEnvironment(listeners, applicationArguments);
-            // 默认情况下设定spring.beaninfo.ignore = true
+            // 默认情况下设定一个系统变量 spring.beaninfo.ignore = true
           	configureIgnoreBeanInfo(environment);
           	// 打印Banner，在classPaths 分别下寻找
           	// 图片格式的banner.("gif", "jpg", "png")
@@ -517,8 +517,11 @@ public class DemoApplication {
                             SpringBootExceptionReporter.class,
                             new Class[] {ConfigurableApplicationContext.class},
                             context);
+          // 准备上下文
             prepareContext(context, environment, listeners, applicationArguments, printedBanner);
+          //刷新上下文，
             refreshContext(context);
+          //空实现，留出来的一个扩展点
             afterRefresh(context, applicationArguments);
           	// 直到这一步，整个启动过程基本算完成了。
             stopWatch.stop();
@@ -528,6 +531,7 @@ public class DemoApplication {
             }
           	// 发送ApplicationStartedEvent
             listeners.started(context);
+          //执行一些“开机启动处理”的业务逻辑，比如缓存预加载等。
             callRunners(context, applicationArguments);
         } catch (Throwable ex) {
             handleRunFailure(context, ex, exceptionReporters, listeners);
@@ -535,6 +539,7 @@ public class DemoApplication {
         }
 
         try {
+          //最后一次发送事件，在整个容器启动后发送ApplicationReadyEvent出来
             listeners.running(context);
         } catch (Throwable ex) {
             handleRunFailure(context, ex, exceptionReporters, null);
@@ -574,30 +579,43 @@ public class DemoApplication {
 **<u>细节点3: Environment Prepared</u>**
 
 ```java
-private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners listeners,
-      ApplicationArguments applicationArguments) {
-   // Create and configure the environment
-   // 如果环境存在，则不创建，不然根据Application.webApplicationType进行创建，
-   //case SERVLET->StandardServletEnvironment
-	//	case REACTIVE->StandardReactiveWebEnvironment
-	//	default:StandardEnvironment
-   ConfigurableEnvironment environment = getOrCreateEnvironment();
-   configureEnvironment(environment, applicationArguments.getSourceArgs());
-   ConfigurationPropertySources.attach(environment);
-   listeners.environmentPrepared(environment);
-   bindToSpringApplication(environment);
-   if (!this.isCustomEnvironment) {
-      environment = new EnvironmentConverter(getClassLoader()).convertEnvironmentIfNecessary(environment,
-            deduceEnvironmentClass());
-   }
-   ConfigurationPropertySources.attach(environment);
-   return environment;
-}
+private ConfigurableEnvironment prepareEnvironment(
+            SpringApplicationRunListeners listeners, ApplicationArguments applicationArguments) {
+        // Create and configure the environment
+        // 如果环境存在，则不创建，不然根据Application.webApplicationType进行创建，
+        // case SERVLET->StandardServletEnvironment
+        //	case REACTIVE->StandardReactiveWebEnvironment
+        //	default:StandardEnvironment
+        ConfigurableEnvironment environment = getOrCreateEnvironment();
+        // 配置环境信息，这里主要是做了2件事
+        // 1. 追加默认的转换器，会搞一个ApplicationConversionService单例出来，转换器可以看具体的
+        //   - GenericConverter的实现类，基本的常见类型都看到了。
+        //   - Formatter<T> 主要是对日期、数字、IP地址的格式化
+        //   当需要加入默认的转换器后，会把这个ApplicationConversionService实例对象加入到Environment里去
+        // 2. 解析args参数，使用SimpleCommandLinePropertySource进行解析，并追加到environment里的propertySources里去。
+        // 3. 找到激活的spring配置文件，塞给environment
+        configureEnvironment(environment, applicationArguments.getSourceArgs());
+        // 环境已经配置的差不多了，这里其实有点疑惑的，对environment.getPropertySouces() 取出来放到了一个
+        // 固定的类里(ConfigurationPropertySourcesPropertySource)，这里source会永远持有最新的environment.getPropertySources().
+        ConfigurationPropertySources.attach(environment);
+        // 通知所有listeners。环境准备好了
+        listeners.environmentPrepared(environment);
+        // 方法名说的是把环境绑定到application这个当前实例，但是最后返回结果似乎是null,未绑定。
+        bindToSpringApplication(environment);
+        if (!this.isCustomEnvironment) {
+            environment =
+                    new EnvironmentConverter(getClassLoader())
+                            .convertEnvironmentIfNecessary(environment, deduceEnvironmentClass());
+        }
+        // 重新刷新下environment里的ConfigurationPropertySourcesPropertySource
+        ConfigurationPropertySources.attach(environment);
+        return environment;
+    }
 ```
 
 三中环境的类图：
 
-<img src="../../assets/img/spring/environment/environment.png" alt="Environment Class Diagram" style="zoom:50%;" />
+<img src="../../assets/img/spring/environment.png" alt="Environment Class Diagram" style="zoom:50%;" />
 
 
 
@@ -652,7 +670,7 @@ private void prepareContext(ConfigurableApplicationContext context, Configurable
 		context.setEnvironment(environment);
 	  // 后置处理上下文。默认配置下只是注册了各式各样的转换器。
 		postProcessApplicationContext(context);
-		// 针对之前找到的7个默认初始化器进行context参数绑定，
+		// 针对之前找到的7个默认初始化器，根据context调用初始化initialize
   	applyInitializers(context);
   	//找到需要监听上下文准备完成的消费者，发送ApplicationContextInitializedEvent
 		listeners.contextPrepared(context);
