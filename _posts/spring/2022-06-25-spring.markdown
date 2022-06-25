@@ -1,0 +1,169 @@
+---
+layout: post
+title:  "SpringBoot 源码解析(一)"
+date:   2022-06-25 11:26:30 +0800
+categories: Spring
+---
+
+# SpringBoot 启动源码解析(二)
+
+## 1、前情回顾
+
+上一期讲到了SpringBoot启动的基本过程，主要是SpringApplication的实例化、初始化以及ApplicationContext的基础生成过程，包含了Environment的准备、Context的准备，SpringBoot在启动过程中的基础型事件。
+
+
+
+## 2、ApplicationContext-RefreshContext
+
+这一篇，我们更进一步，来分析ApplicationContext在RefreshContext中所做的一些事情。
+现在我们分析的内容是Spring的最核心的内容: spring-context-5.2.10.RELEASE.jar, 并不属于SpringBoot。所以有些扩展点站在SpringBoot的层面上其实我们反而不能去很好的扩展。
+
+### 2.1 ApplicationContext的Diagrams
+
+不难发现，我们在追踪到源码层时候，SpringBoot里用到的基本都是接口，换言之，其实在某一时刻，他已经提前创建好了对应的实例。
+
+而本次我们分析的主要是AnnotationConfigServletWebApplicationContext. 因为我们引入的jar是 **spring-boot-starter-web**。
+
+![AnnotationConfigServletWebApplicationContext](../../assets/img/spring/AnnotationConfigServletWebServerApplicationContext.png)
+
+从上图可以看到，其实还挺复杂的，在类的组装、设计上，用到了很多基础设计原则。
+
+### 2.2 Refresh Context
+
+跟进源码，我们发现核心的内容就在**AbstractApplicationContext**, 其实Spring的团队也非常贴心的给了我们每个步骤的概要注释
+
+```java
+	@Override
+	public void refresh() throws BeansException, IllegalStateException {
+		// 加锁，防止
+    synchronized (this.startupShutdownMonitor) {
+			// Prepare this context for refreshing.
+			prepareRefresh();
+
+			// Tell the subclass to refresh the internal bean factory.
+			ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
+
+			// Prepare the bean factory for use in this context.
+			prepareBeanFactory(beanFactory);
+
+			try {
+				// Allows post-processing of the bean factory in context subclasses.
+				postProcessBeanFactory(beanFactory);
+
+				// Invoke factory processors registered as beans in the context.
+				invokeBeanFactoryPostProcessors(beanFactory);
+
+				// Register bean processors that intercept bean creation.
+				registerBeanPostProcessors(beanFactory);
+
+				// Initialize message source for this context.
+				initMessageSource();
+
+				// Initialize event multicaster for this context.
+				initApplicationEventMulticaster();
+
+				// Initialize other special beans in specific context subclasses.
+				onRefresh();
+
+				// Check for listener beans and register them.
+				registerListeners();
+
+				// Instantiate all remaining (non-lazy-init) singletons.
+				finishBeanFactoryInitialization(beanFactory);
+
+				// Last step: publish corresponding event.
+				finishRefresh();
+			}
+
+			catch (BeansException ex) {
+				if (logger.isWarnEnabled()) {
+					logger.warn("Exception encountered during context initialization - " +
+							"cancelling refresh attempt: " + ex);
+				}
+
+				// Destroy already created singletons to avoid dangling resources.
+				destroyBeans();
+
+				// Reset 'active' flag.
+				cancelRefresh(ex);
+
+				// Propagate exception to caller.
+				throw ex;
+			}
+
+			finally {
+				// Reset common introspection caches in Spring's core, since we
+				// might not ever need metadata for singleton beans anymore...
+				resetCommonCaches();
+			}
+		}
+	}
+```
+
+#### 2.2.1 prepareRefresh
+
+```java
+    /**
+     * Prepare this context for refreshing, setting its startup date and active flag as well as
+     * performing any initialization of property sources.
+     */
+    protected void prepareRefresh() {
+        // Switch to active.
+        // 记录下时间
+        this.startupDate = System.currentTimeMillis();
+        //
+        /** Flag that indicates whether this context is currently active. */
+        // private final AtomicBoolean active = new AtomicBoolean();
+        /** Flag that indicates whether this context has been closed already. */
+        // private final AtomicBoolean closed = new AtomicBoolean();
+        // 搞了2个变量，表示上下文目前处于激活状态
+        this.closed.set(false);
+        this.active.set(true);
+
+        if (logger.isDebugEnabled()) {
+            if (logger.isTraceEnabled()) {
+                logger.trace("Refreshing " + this);
+            } else {
+                logger.debug("Refreshing " + getDisplayName());
+            }
+        }
+
+        // Initialize any placeholder property sources in the context environment.
+        // 这里是初始化servlet的一些属性 initServletPropertySources，个人的理解是在SpringBoot启动的时候我们是用不上的，
+        // 因为上下文的实例已经明确好了。而在这里ServletConfig还没有任何内容。
+        // 参考了一些网上的例子: https://blog.csdn.net/u013277209/article/details/109177452
+        initPropertySources();
+
+        // Validate that all properties marked as required are resolvable:
+        // see ConfigurablePropertyResolver#setRequiredProperties
+        // 校验一下环境必填属性
+        getEnvironment().validateRequiredProperties();
+
+        // Store pre-refresh ApplicationListeners...
+        // SpringBoot检索出来的listeners赋值给earlyApplicationListeners
+        if (this.earlyApplicationListeners == null) {
+            this.earlyApplicationListeners = new LinkedHashSet<>(this.applicationListeners);
+        } else {
+            // Reset local application listeners to pre-refresh state.
+            this.applicationListeners.clear();
+            this.applicationListeners.addAll(this.earlyApplicationListeners);
+        }
+
+        // Allow for the collection of early ApplicationEvents,
+        // to be published once the multicaster is available...
+        this.earlyApplicationEvents = new LinkedHashSet<>();
+    }
+```
+
+这里有一个疑惑点，我们需要带着在后续去探索: **earlyApplicationListeners在后续会在哪里使用**
+
+
+
+
+
+
+
+
+
+
+

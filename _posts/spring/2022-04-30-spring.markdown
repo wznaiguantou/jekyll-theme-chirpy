@@ -463,7 +463,7 @@ public class DemoApplication {
 #### 2.1.2 run方法
 
 ```java
-/**
+    /**
      * Run the Spring application, creating and refreshing a new {@link ApplicationContext}.
      *
      * @param args the application arguments (usually passed from a Java main method)
@@ -493,45 +493,45 @@ public class DemoApplication {
         listeners.starting();
         try {
             ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
-           	// 创建/获取环境信息，
-          	// 1. 主要是确认你的web环境是什么
-          	// 2. 对你的args进行解析封装成commandArgs
-          	// 3. 触发环境准备好的事件，供需要的listeners进行消费
-          	// 4. 环境信息绑定到该SpringApplication实例里。
-          	ConfigurableEnvironment environment =
+            // 创建/获取环境信息，
+            // 1. 主要是确认你的web环境是什么
+            // 2. 对你的args进行解析封装成commandArgs
+            // 3. 触发环境准备好的事件，供需要的listeners进行消费
+            // 4. 环境信息绑定到该SpringApplication实例里。
+            ConfigurableEnvironment environment =
                     prepareEnvironment(listeners, applicationArguments);
             // 默认情况下设定一个系统变量 spring.beaninfo.ignore = true
-          	configureIgnoreBeanInfo(environment);
-          	// 打印Banner，在classPaths 分别下寻找
-          	// 图片格式的banner.("gif", "jpg", "png")
-          	// 文字格式的banner.txt
-          	// 如果都没找到，那就使用默认的SpringBootBanner
+            configureIgnoreBeanInfo(environment);
+            // 打印Banner，在classPaths 分别下寻找
+            // 图片格式的banner.("gif", "jpg", "png")
+            // 文字格式的banner.txt
+            // 如果都没找到，那就使用默认的SpringBootBanner
             Banner printedBanner = printBanner(environment);
-          	// 这个特别好理解，就是看你存在那种class就创建其对应的ApplictionContext.
-//一般情况下，目前我们比较常用的是该org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext 
+            // 这个特别好理解，就是看你存在那种class就创建其对应的ApplictionContext.
+            // 一般情况下，目前我们比较常用的是该org.springframework.boot.web.servlet.context.AnnotationConfigServletWebServerApplicationContext
             context = createApplicationContext();
-          // 这一步又开始实例化对应的SpringBootExceptionReporter了
-          // "org.springframework.boot.diagnostics.FailureAnalyzers"
+            // 这一步又开始实例化对应的SpringBootExceptionReporter了
+            // "org.springframework.boot.diagnostics.FailureAnalyzers"
             exceptionReporters =
                     getSpringFactoriesInstances(
                             SpringBootExceptionReporter.class,
                             new Class[] {ConfigurableApplicationContext.class},
                             context);
-          // 准备上下文
+            // 准备上下文
             prepareContext(context, environment, listeners, applicationArguments, printedBanner);
-          //刷新上下文，
+            // 刷新上下文，
             refreshContext(context);
-          //空实现，留出来的一个扩展点
+            // 空实现，留出来的一个扩展点
             afterRefresh(context, applicationArguments);
-          	// 直到这一步，整个启动过程基本算完成了。
+            // 直到这一步，整个启动过程基本算完成了。
             stopWatch.stop();
             if (this.logStartupInfo) {
                 new StartupInfoLogger(this.mainApplicationClass)
                         .logStarted(getApplicationLog(), stopWatch);
             }
-          	// 发送ApplicationStartedEvent
+            // 发送ApplicationStartedEvent
             listeners.started(context);
-          //执行一些“开机启动处理”的业务逻辑，比如缓存预加载等。
+            // 执行一些“开机启动处理”的业务逻辑，比如缓存预加载等。
             callRunners(context, applicationArguments);
         } catch (Throwable ex) {
             handleRunFailure(context, ex, exceptionReporters, listeners);
@@ -539,7 +539,7 @@ public class DemoApplication {
         }
 
         try {
-          //最后一次发送事件，在整个容器启动后发送ApplicationReadyEvent出来
+            // 最后一次发送事件，在整个容器启动后发送ApplicationReadyEvent出来
             listeners.running(context);
         } catch (Throwable ex) {
             handleRunFailure(context, ex, exceptionReporters, null);
@@ -579,13 +579,13 @@ public class DemoApplication {
 **<u>细节点3: Environment Prepared</u>**
 
 ```java
-private ConfigurableEnvironment prepareEnvironment(
+    private ConfigurableEnvironment prepareEnvironment(
             SpringApplicationRunListeners listeners, ApplicationArguments applicationArguments) {
         // Create and configure the environment
         // 如果环境存在，则不创建，不然根据Application.webApplicationType进行创建，
         // case SERVLET->StandardServletEnvironment
-        //	case REACTIVE->StandardReactiveWebEnvironment
-        //	default:StandardEnvironment
+        // case REACTIVE->StandardReactiveWebEnvironment
+        // default:StandardEnvironment
         ConfigurableEnvironment environment = getOrCreateEnvironment();
         // 配置环境信息，这里主要是做了2件事
         // 1. 追加默认的转换器，会搞一个ApplicationConversionService单例出来，转换器可以看具体的
@@ -595,7 +595,7 @@ private ConfigurableEnvironment prepareEnvironment(
         // 2. 解析args参数，使用SimpleCommandLinePropertySource进行解析，并追加到environment里的propertySources里去。
         // 3. 找到激活的spring配置文件，塞给environment
         configureEnvironment(environment, applicationArguments.getSourceArgs());
-        // 环境已经配置的差不多了，这里其实有点疑惑的，对environment.getPropertySouces() 取出来放到了一个
+        // 环境已经配置的差不多了，这里其实有点疑惑的，对environment.getPropertySources() 取出来放到了一个
         // 固定的类里(ConfigurationPropertySourcesPropertySource)，这里source会永远持有最新的environment.getPropertySources().
         ConfigurationPropertySources.attach(environment);
         // 通知所有listeners。环境准备好了
@@ -615,7 +615,7 @@ private ConfigurableEnvironment prepareEnvironment(
 
 三中环境的类图：
 
-<img src="../../assets/img/spring/environment.png" alt="Environment Class Diagram" style="zoom:50%;" />
+<img src="../../assets/img/spring/environment.png" alt="Environment Class Diagram" style="zoom:60%;" />
 
 
 
@@ -708,26 +708,21 @@ private void prepareContext(ConfigurableApplicationContext context, Configurable
 
 
 
-**<u>细节点6: RefreshContext</u>**
-
-// TODO 这里是整个SpringBoot 启动过程中最核心的部分。新开一篇来讲
-
-
-
-**<u>细节点7: AfterRefreshContext</u>**
-
-
-
-
-
 **<u>细节点8: SpringBoot事件流程</u>**
 
-- EventPublishingRunListener start
-- EnvironmentPreparedEvent
-- ApplicationContextInitializedEvent
-- ApplicationPreparedEvent
-- ApplicationStartedEvent
-- AvailabilityChangeEvent.Correct
-- ApplicationReadyEvent
-- AvailabilityChangeEvent.
+<img src="../../assets/img/spring/SpringBoot 事件顺序图.jpg" alt="SpringBoot Eevent" style="zoom:80%;" />
+
+## 3. 总结
+
+本次的源码主要解析了下SpringBootApplication实例化、初始化的过程以及部分run()方法中执行的内容。
+
+我们以一张时序图来总结下我们今天学到的内容
+
+![SpringBootAppliaction StartUp](../../assets/img/spring/SpringBoot 启动过程-1.jpg)
+
+
+
+
+
+
 
